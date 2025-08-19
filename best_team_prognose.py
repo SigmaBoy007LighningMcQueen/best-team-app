@@ -106,8 +106,8 @@ def enforce_team_limit(team, max_pro_club):
 def refill_team(team, players_all, formation, budget, max_pro_club):
     """
     Füllt das Team gemäß Formation, Budget und maximal Spielern pro Verein auf.
+    Pflichtpositionen werden immer zuerst gefüllt, auch wenn Budget knapp ist.
     """
-
     # 1. Berechne, wie viele Spieler pro Position noch fehlen
     needed = {}
     for pos, count in formation.items():
@@ -118,17 +118,16 @@ def refill_team(team, players_all, formation, budget, max_pro_club):
     pool = [p for p in players_all if p not in team]
     pool.sort(key=lambda x: (-x["Punkte"], x["Marktwert"]))
 
-    # 3. Pflichtpositionen füllen, Budget berücksichtigen
+    # 3. Pflichtpositionen füllen, Budget ignorieren
     for pos, n in needed.items():
         for p in pool:
             if n == 0:
                 break
             if p["Position"] == pos and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club:
-                if sum(t["Marktwert"] for t in team) + p["Marktwert"] <= budget:
-                    team.append(p)
-                    n -= 1
+                team.append(p)
+                n -= 1
 
-    # 4. Zusätzliche Spieler hinzufügen, solange Budget & Vereinslimit eingehalten
+    # 4. Zusätzliche Spieler hinzufügen, Budget & Vereinslimit beachten
     used = sum(p["Marktwert"] for p in team)
     for p in pool:
         if p not in team and used + p["Marktwert"] <= budget and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club:
@@ -136,6 +135,7 @@ def refill_team(team, players_all, formation, budget, max_pro_club):
             used += p["Marktwert"]
 
     return team
+
 
 
 
@@ -236,6 +236,7 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
 
 
 
