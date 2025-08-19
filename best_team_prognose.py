@@ -117,7 +117,8 @@ def refill_team(team, players_all, formation, budget, max_pro_club):
     
     for pos, n in pos_needed.items():
         candidates = [p for p in pool if p["Position"]==pos and sum(1 for t in team if t["Verein"]==p["Verein"]) < max_pro_club]
-        candidates.sort(key=lambda x: (-x["Punkte"]/x["Marktwert"], x["Marktwert"]))  # Punkte pro Geld
+        candidates.sort(key=lambda x: (-x["Punkte"]/(x["Marktwert"] if x["Marktwert"]>0 else 1), x["Marktwert"]))
+
         for p in candidates:
             if n <= 0:
                 break
@@ -248,6 +249,7 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
 
 
 
