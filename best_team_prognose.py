@@ -131,7 +131,7 @@ def refill_team(team, players_all, formation, budget, max_pro_club):
 st.title("⚽ Kicker Manager – Beste 37-Mio-Kombi Prognose")
 
 # Datei von GitHub laden
-github_url = "https://raw.githubusercontent.com/DEIN_USER/DEIN_REPO/main/deine_datei.xlsx"
+github_url = "https://github.com/SigmaBoy007LighningMcQueen/best-team-app/blob/main/spieler_mit_position.xlsx"
 players_all = read_players_from_github(github_url)
 players_all = apply_prognosen(players_all)
 
@@ -203,3 +203,4 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
