@@ -105,49 +105,45 @@ def enforce_team_limit(team, max_pro_club):
 
 def refill_team(team, players_all, formation, budget, max_pro_club):
     """
-    Füllt das Team nach Formation, Max-Pro-Club und strikt Budget.
-    Prüft, ob Budget überschritten wird und ersetzt Spieler ggf. mit günstigeren.
+    Füllt das Team nach Formation, Max-Pro-Club und Budget.
+    Ziel: bestmögliche Punkte, Budget möglichst ausgeschöpft.
     """
-    # 1. Pool der verfügbaren Spieler (ohne bereits gewählte)
+    # 1. Zähle bereits vorhandene Spieler pro Position
+    needed = {pos: formation[pos] - sum(1 for p in team if p["Position"] == pos) for pos in formation}
+
+    # 2. Berechne bereits genutztes Budget
+    used = sum(p["Marktwert"] for p in team)
+    budget_left = budget - used
+
+    # 3. Pool der verfügbaren Spieler (ohne bereits gewählte)
     pool = [p for p in players_all if p not in team]
     
-    # 2. Team nach Position auffüllen, nur wenn Platz frei und Budget passt
-    pos_needed = {pos: formation[pos] - sum(1 for p in team if p["Position"]==pos) for pos in formation}
-    used_budget = sum(p["Marktwert"] for p in team)
-    
-    for pos, n in pos_needed.items():
-        candidates = [p for p in pool if p["Position"]==pos and sum(1 for t in team if t["Verein"]==p["Verein"]) < max_pro_club]
-        candidates.sort(key=lambda x: (-x["Punkte"]/(x["Marktwert"] if x["Marktwert"]>0 else 1), x["Marktwert"]))
-
-        for p in candidates:
-            if n <= 0:
-                break
-            if used_budget + p["Marktwert"] <= budget:
-                team.append(p)
-                used_budget += p["Marktwert"]
-                n -= 1
-
-    # 3. Wenn Team noch nicht voll ist, Budget überschreiten verboten → günstigste Spieler hinzufügen
-    while sum(1 for p in team) < sum(formation.values()):
-        # Finde günstigsten Spieler der fehlt
-        missing_positions = [pos for pos, count in pos_needed.items() if count>0]
-        if not missing_positions:
-            break
-        pos = missing_positions[0]
-        candidates = [p for p in pool if p["Position"]==pos and p not in team and sum(1 for t in team if t["Verein"]==p["Verein"])<max_pro_club]
-        if not candidates:
-            break
-        candidates.sort(key=lambda x: x["Marktwert"])
-        p = candidates[0]
-        if used_budget + p["Marktwert"] <= budget:
+    # 4. Fülle Pflichtpositionen
+    for pos, n in needed.items():
+        if n <= 0:
+            continue
+        candidates = [p for p in pool if p["Position"] == pos and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club]
+        # Punkte pro Marktwert sortieren
+        candidates.sort(key=lambda x: (-x["Punkte"]/x["Marktwert"], x["Marktwert"]))
+        for p in candidates[:n]:
             team.append(p)
-            used_budget += p["Marktwert"]
-            pos_needed[pos] -= 1
-        else:
-            # Kein passender Spieler mehr im Budget → abbrechen
-            break
+            used += p["Marktwert"]
+            budget_left = budget - used
+            pool.remove(p)
+
+    # 5. Füge optionale Spieler hinzu, Punkte-maximierend pro Euro
+    # solange Budget noch Spieler zulässt
+    pool = [p for p in pool if sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club]
+    pool.sort(key=lambda x: (-x["Punkte"]/x["Marktwert"], x["Marktwert"]))
+
+    for p in pool:
+        if p["Marktwert"] <= budget_left:
+            team.append(p)
+            used += p["Marktwert"]
+            budget_left = budget - used
 
     return team
+
 
 
 
@@ -249,6 +245,7 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
 
 
 
