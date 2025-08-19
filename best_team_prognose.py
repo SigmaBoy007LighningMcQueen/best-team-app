@@ -113,14 +113,16 @@ def refill_team(team, players_all, formation, budget, max_pro_club):
     pool = [p for p in players_all if p not in team]
     pool.sort(key=lambda x: (-x["Punkte"], x["Marktwert"]))
 
-    # Pflichtpositionen füllen, auch wenn Budget knapp
-    for pos, n in needed.items():
-        for p in pool:
-            if n == 0:
-                break
-            if p["Position"] == pos and sum(1 for t in team if t["Verein"]==p["Verein"]) < max_pro_club:
+    # Pflichtpositionen füllen, Budget berücksichtigen
+for pos, n in needed.items():
+    for p in pool:
+        if n == 0:
+            break
+        if p["Position"] == pos and sum(1 for t in team if t["Verein"]==p["Verein"]) < max_pro_club:
+            if sum(t["Marktwert"] for t in team) + p["Marktwert"] <= budget:
                 team.append(p)
                 n -= 1
+
 
     # 2. Budget und Max-Pro-Club prüfen für zusätzliche Spieler
     used = sum(p["Marktwert"] for p in team)
@@ -228,6 +230,7 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
 
 
 
