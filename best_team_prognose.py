@@ -104,32 +104,39 @@ def enforce_team_limit(team, max_pro_club):
     return team
 
 def refill_team(team, players_all, formation, budget, max_pro_club):
-    # 1. Zuerst Pflichtpositionen füllen, Budget berücksichtigen
+    """
+    Füllt das Team gemäß Formation, Budget und maximal Spielern pro Verein auf.
+    """
+
+    # 1. Berechne, wie viele Spieler pro Position noch fehlen
     needed = {}
     for pos, count in formation.items():
-        current = sum(1 for p in team if p["Position"]==pos)
+        current = sum(1 for p in team if p["Position"] == pos)
         needed[pos] = count - current
 
+    # 2. Pool der verfügbaren Spieler (ohne bereits gewählte)
     pool = [p for p in players_all if p not in team]
     pool.sort(key=lambda x: (-x["Punkte"], x["Marktwert"]))
 
+    # 3. Pflichtpositionen füllen, Budget berücksichtigen
     for pos, n in needed.items():
         for p in pool:
             if n == 0:
                 break
-            if p["Position"] == pos and sum(1 for t in team if t["Verein"]==p["Verein"]) < max_pro_club:
+            if p["Position"] == pos and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club:
                 if sum(t["Marktwert"] for t in team) + p["Marktwert"] <= budget:
                     team.append(p)
                     n -= 1
 
-    # 2. Budget und Max-Pro-Club prüfen für zusätzliche Spieler
+    # 4. Zusätzliche Spieler hinzufügen, solange Budget & Vereinslimit eingehalten
     used = sum(p["Marktwert"] for p in team)
     for p in pool:
-        if p not in team and used + p["Marktwert"] <= budget and sum(1 for t in team if t["Verein"] < max_pro_club):
+        if p not in team and used + p["Marktwert"] <= budget and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club:
             team.append(p)
             used += p["Marktwert"]
 
-    return team  # <-- korrekt eingerückt innerhalb der Funktion
+    return team
+
 
 
 
@@ -229,6 +236,7 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
 
 
 
