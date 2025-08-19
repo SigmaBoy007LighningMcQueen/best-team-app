@@ -13,9 +13,9 @@ FORMATION = {"GOALKEEPER": 1, "DEFENDER": 3, "MIDFIELDER": 4, "FORWARD": 3}
 UNIT = 100_000  # Budget-Einheiten
 MAX_SPIELER_PRO_VEREIN = 1
 
-WUNSCHSPIELER = {"Undav","Asllani","Majer","Doan","Grimaldo","Querfeld","Schwäbe"}
+WUNSCHSPIELER = {}
 PROGNOSE = {}
-AUSGESCHLOSSEN = {"Weiper","Ilic","Dompé","Palacios","Essende","Capaldo","Nebel","Vavro"}
+AUSGESCHLOSSEN = {}
 VERLETZT_HALBES_JAHR = {}
 
 # ---------------------------
@@ -215,4 +215,5 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
 
