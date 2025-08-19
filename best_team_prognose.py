@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
-import sys, math, csv
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from collections import defaultdict
+import requests
+from io import BytesIO
 
 # ---------------------------
 # KONSTANTEN & EINSTELLUNGEN
@@ -12,37 +13,20 @@ FORMATION = {"GOALKEEPER": 1, "DEFENDER": 3, "MIDFIELDER": 4, "FORWARD": 3}
 UNIT = 100_000  # Budget-Einheiten
 MAX_SPIELER_PRO_VEREIN = 1
 
-WUNSCHSPIELER = {
-    "Undav","Asllani","Majer","Doan","Grimaldo","Querfeld","Schwäbe"
-}
-
+WUNSCHSPIELER = {"Undav","Asllani","Majer","Doan","Grimaldo","Querfeld","Schwäbe"}
 PROGNOSE = {}
-
-AUSGESCHLOSSEN = {
-    "Weiper","Ilic","Dompé","Palacios","Essende","Capaldo","Nebel","Vavro"
-}
-
+AUSGESCHLOSSEN = {"Weiper","Ilic","Dompé","Palacios","Essende","Capaldo","Nebel","Vavro"}
 VERLETZT_HALBES_JAHR = {}
 
 # ---------------------------
 # FUNKTIONEN
 # ---------------------------
-def apply_prognosen(players: List[Dict]) -> List[Dict]:
-    for p in players:
-        name = (p.get("Angezeigter Name") or "").strip()
-        if not name:
-            name = (p.get("Vorname", "") + " " + p.get("Nachname", "")).strip()
-
-        if name in AUSGESCHLOSSEN:
-            p["Punkte"] = 0
-        elif name in PROGNOSE:
-            p["Punkte"] = PROGNOSE[name]
-        elif name in VERLETZT_HALBES_JAHR:
-            p["Punkte"] = int(p["Punkte"] * VERLETZT_HALBES_JAHR[name])
-    return players
-
-def read_players_from_github(url) -> List[Dict]:
-    df = pd.read_excel(url)
+def read_players_from_github(url: str) -> List[Dict]:
+    resp = requests.get(url)
+    resp.raise_for_status()  # Fehler falls Download fehlschlägt
+    file_bytes = BytesIO(resp.content)
+    df = pd.read_excel(file_bytes)
+    
     df["Marktwert"] = pd.to_numeric(df["MW mio."], errors="coerce") * 1_000_000
     df["Punkte"] = pd.to_numeric(df["Pkt"], errors="coerce")
     df["Verein"] = df["Team"]
@@ -53,9 +37,22 @@ def read_players_from_github(url) -> List[Dict]:
     df["cost_u"] = (df["Marktwert"] // UNIT).astype(int)
     return df.to_dict("records")
 
+def apply_prognosen(players: List[Dict]) -> List[Dict]:
+    for p in players:
+        name = (p.get("Angezeigter Name") or "").strip()
+        if not name:
+            name = (p.get("Vorname", "") + " " + p.get("Nachname", "")).strip()
+        if name in AUSGESCHLOSSEN:
+            p["Punkte"] = 0
+        elif name in PROGNOSE:
+            p["Punkte"] = PROGNOSE[name]
+        elif name in VERLETZT_HALBES_JAHR:
+            p["Punkte"] = int(p["Punkte"] * VERLETZT_HALBES_JAHR[name])
+    return players
+
 def dp_position(players, n, B):
     dp = [[-10**15]*(B+1) for _ in range(n+1)]
-    choose = [[None]*(B+1) for _ in range(n+1)]
+    choose = [[False]*(B+1) for _ in range(n+1)]
     dp[0][0] = 0
     for i in range(1,n+1):
         p = players[i-1]
@@ -83,10 +80,9 @@ def merge_blocks(g, dp, n):
 def reconstruct(order, blocks, splits, best_b):
     chosen_ids = []
     b = best_b
-    for pos, split_b in zip(reversed(order), reversed(splits)):
+    for pos, split_b_list in zip(reversed(order), reversed(splits)):
         pools, need, dp, choose = blocks[pos]
-        b2 = split_b[b]
-        # Rückwärtsrekonstruktion
+        b2 = split_b_list[b]
         i = need
         while i>0 and b>=0:
             if choose[i][b-b2]:
@@ -130,8 +126,8 @@ def refill_team(team, players_all, formation, budget, max_pro_club):
 # ---------------------------
 st.title("⚽ Kicker Manager – Beste 37-Mio-Kombi Prognose")
 
-# Datei von GitHub laden
-github_url = "https://github.com/SigmaBoy007LighningMcQueen/best-team-app/blob/main/spieler_mit_position.xlsx"
+# Raw-Link von GitHub verwenden!
+github_url = "https://raw.githubusercontent.com/SigmaBoy007LighningMcQueen/best-team-app/main/spieler_mit_position.xlsx"
 players_all = read_players_from_github(github_url)
 players_all = apply_prognosen(players_all)
 
@@ -203,4 +199,3 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
-
