@@ -106,8 +106,9 @@ def enforce_team_limit(team, max_pro_club):
 def refill_team(team, players_all, formation, budget, max_pro_club):
     """
     Füllt das Team nach Formation, Max-Pro-Club und Budget.
-    Pflichtpositionen und Wunschspieler werden immer ins Team genommen (Budget kann überschritten werden).
-    Danach werden optionale Spieler punktmaximierend hinzugefügt, nur wenn Budget noch passt.
+    Pflichtspieler (inkl. Wunschspieler) werden immer ins Team genommen.
+    Optionale Spieler werden punktmaximierend hinzugefügt, nur wenn Budget passt.
+    Teamgröße = 11, Budget strikt einhalten.
     """
     # 1. Pflichtpositionen prüfen
     needed = {}
@@ -120,7 +121,7 @@ def refill_team(team, players_all, formation, budget, max_pro_club):
     # Sortiere nach Punkten absteigend, Marktwert aufsteigend (bei Gleichstand)
     pool.sort(key=lambda x: (-x["Punkte"], x["Marktwert"]))
 
-    # 3. Pflichtpositionen auffüllen, Budget nur wenn möglich
+    # 3. Pflichtpositionen auffüllen (Budget kann überschritten werden)
     used = sum(p["Marktwert"] for p in team)
     for pos, n in needed.items():
         candidates = [p for p in pool if p["Position"] == pos and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club]
@@ -128,7 +129,7 @@ def refill_team(team, players_all, formation, budget, max_pro_club):
             team.append(p)
             used += p["Marktwert"]
 
-    # 4. Optionale Spieler punktmaximierend hinzufügen
+    # 4. Optionale Spieler punktmaximierend hinzufügen, Budget strikt einhalten
     for p in pool:
         if len(team) >= 11:
             break
@@ -137,16 +138,8 @@ def refill_team(team, players_all, formation, budget, max_pro_club):
                 team.append(p)
                 used += p["Marktwert"]
 
-    # 5. Falls noch unter 11 Spieler, notfalls Budget überschreiten
-    if len(team) < 11:
-        for p in pool:
-            if len(team) >= 11:
-                break
-            if p not in team and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club:
-                team.append(p)
-                used += p["Marktwert"]
-
     return team
+
 
 
 
@@ -249,6 +242,7 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
 
 
 
