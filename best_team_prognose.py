@@ -103,47 +103,71 @@ def enforce_team_limit(team, max_pro_club):
                 team.remove(p)
     return team
 
-def refill_team(team, players_all, formation, budget, max_pro_club):
+# ---------------------------
+# FUNKTIONEN NEU/ÜBERARBEITET
+# ---------------------------
+def build_optimal_team(players_all, formation, budget, max_pro_club, wish_players=set()):
     """
-    Füllt das Team nach Formation, Max-Pro-Club und Budget.
-    Pflichtpositionen werden zuerst gefüllt.
-    Danach werden optionale Spieler nur hinzugefügt, wenn Budget und Formation es zulassen.
+    Optimales Team bauen:
+    - Wunschspieler fix
+    - Maximale Punkte unter Budget
+    - Exakt Formation, Max 1 Spieler pro Verein
     """
-    # 1. Berechne, wie viele Spieler pro Position noch fehlen
-    needed = {}
+    # 1. Pools pro Position
+    pools = {}
     for pos, count in formation.items():
-        current = sum(1 for p in team if p["Position"] == pos)
-        needed[pos] = max(0, count - current)
+        pools[pos] = [p for p in players_all if p["Position"] == pos]
 
-    # 2. Pool der verfügbaren Spieler (ohne bereits gewählte)
-    pool = [p for p in players_all if p not in team]
-    
-    # 3. Pflichtpositionen füllen, Budget berücksichtigen **wenn möglich**
-    used = sum(p["Marktwert"] for p in team)
-    for pos, n in needed.items():
-        candidates = [p for p in pool if p["Position"] == pos and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club]
-        # nach Punkte pro Marktwert sortieren, absichern gegen Division durch 0
-        candidates.sort(key=lambda x: (-x["Punkte"] / max(x["Marktwert"], 1), x["Marktwert"]))
-        for p in candidates[:n]:
-            if used + p["Marktwert"] <= budget:
-                team.append(p)
-                used += p["Marktwert"]
-
-    # 4. Optional: Budget auffüllen mit besten Spielern, ohne Formation zu überschreiten
-    for pos, count in formation.items():
-        while sum(1 for p in team if p["Position"] == pos) < count:
-            candidates = [p for p in pool if p["Position"] == pos and p not in team and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club]
-            if not candidates:
-                break
-            candidates.sort(key=lambda x: (-x["Punkte"] / max(x["Marktwert"], 1), x["Marktwert"]))
-            p = candidates[0]
-            if used + p["Marktwert"] <= budget:
-                team.append(p)
-                used += p["Marktwert"]
-            else:
+    # 2. Fixiere Wunschspieler
+    fixed_players = []
+    for name in wish_players:
+        for p in players_all:
+            if p["Angezeigter Name"] == name:
+                fixed_players.append(p)
                 break
 
+    # 3. Restbudget & Restformation
+    used_budget = sum(p["Marktwert"] for p in fixed_players)
+    remaining_budget = budget - used_budget
+    remaining_formation = formation.copy()
+    for p in fixed_players:
+        remaining_formation[p["Position"]] -= 1
+
+    # 4. Pools ohne Wunschspieler
+    pool = [p for p in players_all if p not in fixed_players]
+
+    # 5. DP pro Position
+    UNIT = 100_000
+    B = remaining_budget // UNIT
+    order = [pos for pos in ["GOALKEEPER","DEFENDER","MIDFIELDER","FORWARD"] if remaining_formation[pos] > 0]
+    blocks = {}
+    for pos in order:
+        pos_pool = [p for p in pool if p["Position"] == pos]
+        n = remaining_formation[pos]
+        dp, choose = dp_position(pos_pool, n, B)
+        blocks[pos] = (pos_pool, n, dp, choose)
+
+    # 6. Merge DP-Blöcke
+    g = [-10**15]*(B+1)
+    g[0] = 0
+    splits = []
+    for pos in order:
+        pos_pool, need, dp, choose = blocks[pos]
+        g, split_b = merge_blocks(g, dp, need)
+        splits.append(split_b)
+
+    # 7. Bestes Budget wählen
+    best_points, best_b = max((g[b], b) for b in range(B+1))
+
+    # 8. Team rekonstruieren
+    chosen_ids = reconstruct(order, blocks, splits, best_b)
+    id_to_row = {p["ID"]: p for p in players_all}
+    team = fixed_players + [id_to_row[i] for i in chosen_ids]
+
+    # 9. Maximal 1 Spieler pro Verein
+    team = enforce_team_limit(team, max_pro_club)
     return team
+
 
 
 
@@ -247,6 +271,7 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
 
 
 
