@@ -106,37 +106,48 @@ def enforce_team_limit(team, max_pro_club):
 def refill_team(team, players_all, formation, budget, max_pro_club):
     """
     Füllt das Team nach Formation, Max-Pro-Club und Budget.
-    Pflichtpositionen werden zuerst gefüllt, Budget für diese wird aber als "verbrannt" gerechnet.
-    Danach werden optionale Spieler nur hinzugefügt, wenn Budget übrig ist.
+    Pflichtpositionen und Wunschspieler werden immer ins Team genommen (Budget kann überschritten werden).
+    Danach werden optionale Spieler punktmaximierend hinzugefügt, nur wenn Budget noch passt.
     """
-    # 1. Berechne, wie viele Spieler pro Position noch fehlen
+    # 1. Pflichtpositionen prüfen
     needed = {}
     for pos, count in formation.items():
         current = sum(1 for p in team if p["Position"] == pos)
-        needed[pos] = count - current
+        needed[pos] = max(count - current, 0)
 
     # 2. Pool der verfügbaren Spieler (ohne bereits gewählte)
     pool = [p for p in players_all if p not in team]
+    # Sortiere nach Punkten absteigend, Marktwert aufsteigend (bei Gleichstand)
     pool.sort(key=lambda x: (-x["Punkte"], x["Marktwert"]))
 
-    # 3. Pflichtpositionen füllen, Budget berücksichtigen **wenn möglich**, aber notfalls überschreiten
+    # 3. Pflichtpositionen auffüllen, Budget nur wenn möglich
     used = sum(p["Marktwert"] for p in team)
     for pos, n in needed.items():
-        candidates = [p for p in pool 
-                      if p["Position"] == pos and 
-                         sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club]
+        candidates = [p for p in pool if p["Position"] == pos and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club]
         for p in candidates[:n]:
+            team.append(p)
+            used += p["Marktwert"]
+
+    # 4. Optionale Spieler punktmaximierend hinzufügen
+    for p in pool:
+        if len(team) >= 11:
+            break
+        if p not in team and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club:
             if used + p["Marktwert"] <= budget:
                 team.append(p)
                 used += p["Marktwert"]
 
-    # 4. Optionale Spieler hinzufügen, nur wenn Budget noch passt
-    for p in pool:
-        if p not in team and used + p["Marktwert"] <= budget and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club:
-            team.append(p)
-            used += p["Marktwert"]
+    # 5. Falls noch unter 11 Spieler, notfalls Budget überschreiten
+    if len(team) < 11:
+        for p in pool:
+            if len(team) >= 11:
+                break
+            if p not in team and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club:
+                team.append(p)
+                used += p["Marktwert"]
 
     return team
+
 
 
 
@@ -238,6 +249,7 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
 
 
 
