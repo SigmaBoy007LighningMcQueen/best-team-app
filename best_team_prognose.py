@@ -13,9 +13,9 @@ FORMATION = {"GOALKEEPER": 1, "DEFENDER": 3, "MIDFIELDER": 4, "FORWARD": 3}
 UNIT = 100_000  # Budget-Einheiten
 MAX_SPIELER_PRO_VEREIN = 1
 
-WUNSCHSPIELER = set()
-AUSGESCHLOSSEN = set()
+WUNSCHSPIELER = {}
 PROGNOSE = {}
+AUSGESCHLOSSEN = {}
 VERLETZT_HALBES_JAHR = {}
 
 # ---------------------------
@@ -23,7 +23,7 @@ VERLETZT_HALBES_JAHR = {}
 # ---------------------------
 def read_players_from_github(url: str) -> List[Dict]:
     resp = requests.get(url)
-    resp.raise_for_status()
+    resp.raise_for_status()  # Fehler falls Download fehlschlägt
     file_bytes = BytesIO(resp.content)
     df = pd.read_excel(file_bytes)
     
@@ -105,68 +105,50 @@ def enforce_team_limit(team, max_pro_club):
 
 def refill_team(team, players_all, formation, budget, max_pro_club):
     """
-    Erzeugt ein optimales Team unter Berücksichtigung von Formation, Budget und Vereinslimits.
-    Startet immer von Grund auf, auch wenn Wunschspieler vorhanden sind.
+    Füllt das Team nach Formation, Max-Pro-Club und Budget.
+    Pflichtpositionen werden zuerst gefüllt, Budget für diese wird aber als "verbrannt" gerechnet.
+    Danach werden optionale Spieler nur hinzugefügt, wenn Budget übrig ist.
     """
-    # Pool vorbereiten (ohne ausgeschlossene Spieler)
+    # 1. Berechne, wie viele Spieler pro Position noch fehlen
+    needed = {}
+    for pos, count in formation.items():
+        current = sum(1 for p in team if p["Position"] == pos)
+        needed[pos] = count - current
+
+    # 2. Pool der verfügbaren Spieler (ohne bereits gewählte)
     pool = [p for p in players_all if p not in team]
+    pool.sort(key=lambda x: (-x["Punkte"], x["Marktwert"]))
 
-    # Budget-Einheiten
-    B = int(budget // UNIT)
+    # 3. Pflichtpositionen füllen, Budget berücksichtigen **wenn möglich**, aber notfalls überschreiten
+    used = sum(p["Marktwert"] for p in team)
+    for pos, n in needed.items():
+        candidates = [p for p in pool if p["Position"] == pos and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club]
+        for p in candidates[:n]:
+            team.append(p)
+            used += p["Marktwert"]
 
-    # Bestimme, wie viele Spieler pro Position noch fehlen
-    formation_needed = formation.copy()
-    for p in team:
-        pos = p["Position"]
-        formation_needed[pos] = max(0, formation_needed[pos]-1)
+    # 4. Optionale Spieler hinzufügen, nur wenn Budget noch passt
+    for p in pool:
+        if p not in team and used + p["Marktwert"] <= budget and sum(1 for t in team if t["Verein"] == p["Verein"]) < max_pro_club:
+            team.append(p)
+            used += p["Marktwert"]
 
-    order = [pos for pos in ["GOALKEEPER","DEFENDER","MIDFIELDER","FORWARD"] if formation_needed[pos] > 0]
+    return team
 
-    # Erstelle DP-Blöcke für jede Position
-    blocks = {}
-    for pos in order:
-        candidates = [p for p in pool if p["Position"] == pos]
-        candidates.sort(key=lambda x: (-x["Punkte"], x["cost_u"]))
-        blocks[pos] = dp_position(candidates, formation_needed[pos], B) + (candidates,)
 
-    # Merge Blöcke
-    g = [0.0] + [-10**15]*B
-    splits = []
-    for pos in order:
-        dp, choose, candidates = blocks[pos]
-        blocks[pos] = (candidates, formation_needed[pos], dp, choose)
-        g, split_b2 = merge_blocks(g, dp, formation_needed[pos])
-        splits.append(split_b2)
 
-    best_points, best_b = max((g[b], b) for b in range(B+1))
 
-    chosen_ids = reconstruct(order, blocks, splits, best_b)
-    id_to_row = {p["ID"]: p for p in players_all}
-    team_final = [id_to_row[i] for i in chosen_ids]
 
-    # Füge Wunschspieler hinzu (vorher sicherstellen, dass sie im Team sind)
-    team_final += [p for p in team if p in players_all]
 
-    # Durchsetze max Spieler pro Verein
-    team_final = enforce_team_limit(team_final, max_pro_club)
-
-    # Sortiere final nach Position und Punkte
-    pos_rank = {"GOALKEEPER":0,"DEFENDER":1,"MIDFIELDER":2,"FORWARD":3}
-    team_final.sort(key=lambda r: (pos_rank[r["Position"]], -r["Punkte"], r["Marktwert"]))
-
-    return team_final
 
 # ---------------------------
 # STREAMLIT APP
 # ---------------------------
 st.title("⚽ Kicker Manager – Beste 37-Mio-Kombi Prognose")
 
-# GitHub Excel
+# Raw-Link von GitHub verwenden!
 github_url = "https://raw.githubusercontent.com/SigmaBoy007LighningMcQueen/best-team-app/main/spieler_mit_position.xlsx"
 players_all = read_players_from_github(github_url)
-players_all = apply_prognosen(players_all)
-
-# Sidebar: Wunschspieler
 st.sidebar.subheader("⭐ Wunschspieler")
 wunschspieler_input = st.sidebar.multiselect(
     "Wähle deine Wunschspieler aus",
@@ -175,7 +157,6 @@ wunschspieler_input = st.sidebar.multiselect(
 )
 WUNSCHSPIELER = set(wunschspieler_input)
 
-# Sidebar: Ausgeschlossene Spieler
 st.sidebar.subheader("⛔ Ausgeschlossene Spieler")
 ausgeschlossen_input = st.sidebar.multiselect(
     "Wähle Spieler, die ausgeschlossen werden sollen",
@@ -184,7 +165,9 @@ ausgeschlossen_input = st.sidebar.multiselect(
 )
 AUSGESCHLOSSEN = set(ausgeschlossen_input)
 
-# Wunschspieler in Team aufnehmen
+players_all = apply_prognosen(players_all)
+
+# Wunschspieler
 fixed_players = []
 for name in WUNSCHSPIELER:
     for p in players_all:
@@ -193,10 +176,49 @@ for name in WUNSCHSPIELER:
             fixed_players.append(p)
             break
 
-# Generiere das finale Team
-team = refill_team(fixed_players, players_all, FORMATION, BUDGET, MAX_SPIELER_PRO_VEREIN)
+budget_used = sum(p["Marktwert"] for p in fixed_players)
+budget_left = BUDGET - budget_used
 
-# Ausgabe
+formation_left = FORMATION.copy()
+for p in fixed_players:
+    pos = p["Position"]
+    if formation_left[pos] > 0:
+        formation_left[pos] -= 1
+
+pools = {}
+for pos, need in formation_left.items():
+    pool = [p for p in players_all if p["Position"] == pos and p not in fixed_players]
+    pool.sort(key=lambda x: (x["Punkte"], -x["Marktwert"]), reverse=True)
+    pools[pos] = pool[:200]
+
+B = int(budget_left // UNIT)
+order = [pos for pos in ["GOALKEEPER","DEFENDER","MIDFIELDER","FORWARD"] if formation_left[pos] > 0]
+blocks = {}
+for pos in order:
+    dp, choose = dp_position(pools[pos], formation_left[pos], B)
+    blocks[pos] = (pools[pos], formation_left[pos], dp, choose)
+
+g = [0.0] + [0.0]*B
+splits = []
+for pos in order:
+    pools_pos, need, dp, choose = blocks[pos]
+    g, split_b2 = merge_blocks(g, dp, need)
+    splits.append(split_b2)
+
+best_points, best_b = -10**15, -1
+for b in range(B+1):
+    if g[b] > best_points:
+        best_points, best_b = g[b], b
+
+chosen_ids = reconstruct(order, blocks, splits, best_b)
+id_to_row = {p["ID"]: p for p in players_all}
+team = fixed_players + [id_to_row[i] for i in chosen_ids]
+team = enforce_team_limit(team, MAX_SPIELER_PRO_VEREIN)
+team = refill_team(team, players_all, FORMATION, BUDGET, MAX_SPIELER_PRO_VEREIN)
+
+pos_rank = {"GOALKEEPER":0,"DEFENDER":1,"MIDFIELDER":2,"FORWARD":3}
+team.sort(key=lambda r: (pos_rank[r["Position"]], -r["Punkte"], r["Marktwert"]))
+
 team_df = pd.DataFrame(team)[["Position","Angezeigter Name","Verein","Punkte","Marktwert","ID"]]
 st.subheader("📊 Beste 37-Mio-Kombination")
 st.dataframe(team_df)
@@ -206,7 +228,6 @@ total_points = sum(r["Punkte"] for r in team)
 st.write(f"**Gesamtpunkte:** {int(total_points)}")
 st.write(f"**Gesamtkosten:** {int(total_cost):,}".replace(",", "."))
 
-# CSV Download
 csv = team_df.to_csv(index=False, sep=";").encode('utf-8')
 st.download_button(
     label="Team als CSV herunterladen",
@@ -214,3 +235,13 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
+
+
+
+
+
+
+
+
+
