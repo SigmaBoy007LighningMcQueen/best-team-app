@@ -129,6 +129,22 @@ st.title("⚽ Kicker Manager – Beste 37-Mio-Kombi Prognose")
 # Raw-Link von GitHub verwenden!
 github_url = "https://raw.githubusercontent.com/SigmaBoy007LighningMcQueen/best-team-app/main/spieler_mit_position.xlsx"
 players_all = read_players_from_github(github_url)
+st.sidebar.subheader("⭐ Wunschspieler")
+wunschspieler_input = st.sidebar.multiselect(
+    "Wähle deine Wunschspieler aus",
+    options=[p["Angezeigter Name"] for p in players_all],
+    default=list(WUNSCHSPIELER)
+)
+WUNSCHSPIELER = set(wunschspieler_input)
+
+st.sidebar.subheader("⛔ Ausgeschlossene Spieler")
+ausgeschlossen_input = st.sidebar.multiselect(
+    "Wähle Spieler, die ausgeschlossen werden sollen",
+    options=[p["Angezeigter Name"] for p in players_all],
+    default=list(AUSGESCHLOSSEN)
+)
+AUSGESCHLOSSEN = set(ausgeschlossen_input)
+
 players_all = apply_prognosen(players_all)
 
 # Wunschspieler
@@ -199,3 +215,4 @@ st.download_button(
     file_name='kicker_manager_best_team_prognose_wunsch.csv',
     mime='text/csv',
 )
+
